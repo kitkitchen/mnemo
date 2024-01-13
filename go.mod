@@ -1,4 +1,4 @@
-module github.com/seanburman/store
+module github.com/kitkitchen/mnemo
 
 go 1.21.5
 

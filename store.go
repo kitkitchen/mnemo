@@ -1,5 +1,5 @@
 // Package store blah blah blah
-package store
+package mnemo
 
 import (
 	"fmt"
