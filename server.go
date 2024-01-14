@@ -2,17 +2,18 @@ package mnemo
 
 import (
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/labstack/echo/v4"
 )
 
-var manager = &serverManager{
+var srvMgr = &srvManager{
 	servers: make(map[string]*Server),
 }
 
 type (
-	serverManager struct {
+	srvManager struct {
 		mu      sync.Mutex
 		servers map[string]*Server
 	}
@@ -20,7 +21,7 @@ type (
 		app             *echo.Echo
 		cfg             serverConfig
 		msgs            chan []byte
-		onNewConnection func(c *Connection)
+		onNewConnection func(c *Conn)
 		ConnectionPool  *Pool
 	}
 	serverConfig struct {
@@ -34,8 +35,8 @@ func NewServer(cfg serverConfig) (*Server, error) {
 	if cfg.Path == "" {
 		return nil, fmt.Errorf("server path cannot root")
 	}
-	manager.mu.Lock()
-	for port, sv := range manager.servers {
+	srvMgr.mu.Lock()
+	for port, sv := range srvMgr.servers {
 		if port == cfg.Port {
 			return nil, fmt.Errorf("server with port %s already exists", cfg.Port)
 		}
@@ -54,17 +55,16 @@ func NewServer(cfg serverConfig) (*Server, error) {
 		ConnectionPool: NewPool(),
 	}
 
-	manager.servers[server.cfg.Port] = server
-	manager.mu.Unlock()
+	srvMgr.servers[server.cfg.Port] = server
+	srvMgr.mu.Unlock()
 
-	server.app.Static("", "client/web-build")
 	ws := server.app.Group(cfg.Path + "/ws")
 	ws.GET("/subscribe", server.handleSubscribe)
 
 	return server, nil
 }
 
-func NewConfig(port, path, key string) serverConfig {
+func NewServerConfig(port, path, key string) serverConfig {
 	//TODO: Use functional config
 	return serverConfig{
 		port, path, key,
@@ -79,14 +79,15 @@ func (s *Server) listenAndServe() {
 	go s.app.Start(s.cfg.Port)
 }
 
-func (s *Server) Shutdown() {
-	manager.mu.Lock()
-	delete(manager.servers, s.cfg.Port)
-	manager.mu.Unlock()
+func (s *Server) Shutdown() error {
+	srvMgr.mu.Lock()
+	delete(srvMgr.servers, s.cfg.Port)
+	srvMgr.mu.Unlock()
 	err := s.app.Close()
 	if err != nil {
-		logger.Error(err)
+		return err
 	}
+	return nil
 }
 
 func (s *Server) handleSubscribe(ctx echo.Context) error {
@@ -105,7 +106,7 @@ func (s *Server) handleSubscribe(ctx echo.Context) error {
 	return conn.Close()
 }
 
-func (s *Server) SetOnNewConnection(callback func(c *Connection)) {
+func (s *Server) SetOnNewConnection(callback func(c *Conn)) {
 	s.onNewConnection = callback
 }
 
@@ -114,7 +115,7 @@ func (s *Server) Publish(msg interface{}) {
 		select {
 		case conn.Messages <- msg:
 		default:
-			logger.Info("closing connection: ", conn.Key)
+			log.Println("closing connection: ", conn.Key)
 			conn.Close()
 		}
 	}

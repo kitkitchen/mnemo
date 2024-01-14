@@ -7,22 +7,22 @@ import (
 
 type Pool struct {
 	mu    sync.Mutex
-	conns map[interface{}]*Connection
+	conns map[interface{}]*Conn
 }
 
 func NewPool() *Pool {
 	return &Pool{
-		conns: make(map[interface{}]*Connection),
+		conns: make(map[interface{}]*Conn),
 	}
 }
 
-func (p *Pool) Connections() map[interface{}]*Connection {
+func (p *Pool) Connections() map[interface{}]*Conn {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.conns
 }
 
-func (p *Pool) AddConnection(c *Connection) error {
+func (p *Pool) AddConnection(c *Conn) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_, ok := p.conns[c.Key]
@@ -34,7 +34,7 @@ func (p *Pool) AddConnection(c *Connection) error {
 	return nil
 }
 
-func (p *Pool) removeConnection(c *Connection) {
+func (p *Pool) removeConnection(c *Conn) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.conns, c)

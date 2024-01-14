@@ -2,6 +2,7 @@ package mnemo
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -10,7 +11,7 @@ import (
 )
 
 type (
-	Connection struct {
+	Conn struct {
 		websocket *websocket.Conn
 		Pool      *Pool
 		Key       interface{}
@@ -18,15 +19,14 @@ type (
 	}
 )
 
-func NewConnection(ctx echo.Context) (*Connection, error) {
+func NewConnection(ctx echo.Context) (*Conn, error) {
 	upgrader := websocket.Upgrader{}
 	websocket, err := upgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
 	if err != nil {
-		logger.Error("error upgrading connection: ", err.Error())
 		return nil, echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	c := &Connection{
+	c := &Conn{
 		websocket: websocket,
 		Key:       uuid.New(),
 		Messages:  make(chan interface{}, 16),
@@ -34,7 +34,7 @@ func NewConnection(ctx echo.Context) (*Connection, error) {
 	return c, nil
 }
 
-func (c *Connection) Close() error {
+func (c *Conn) Close() error {
 	if c == nil {
 		return fmt.Errorf("attemped to close nil Connection")
 	}
@@ -43,8 +43,8 @@ func (c *Connection) Close() error {
 	return nil
 }
 
-func (c *Connection) Listen() {
-	go func(c *Connection) {
+func (c *Conn) Listen() {
+	go func(c *Conn) {
 		for {
 			if _, _, err := c.websocket.ReadMessage(); err != nil {
 				if websocket.IsUnexpectedCloseError(
@@ -53,7 +53,7 @@ func (c *Connection) Listen() {
 					websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure,
 				) {
-					logger.Warn(err)
+					log.Println(err)
 				}
 				close(c.Messages)
 				break
@@ -69,12 +69,12 @@ func (c *Connection) Listen() {
 		}
 
 		if err := c.websocket.WriteJSON(msg); err != nil {
-			logger.Error(err)
+			log.Println(err)
 			c.Close()
 		}
 	}
 }
 
-func (c *Connection) Publish(msg interface{}) {
+func (c *Conn) Publish(msg interface{}) {
 	c.Messages <- msg
 }

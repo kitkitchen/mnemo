@@ -14,14 +14,14 @@ const ServerStore StoreKey = "servers"
 
 var ServerCache = CacheKey("servers_cache")
 
-var StoreManager = storeManager{
+var strMgr = storeManager{
 	stores: make(map[StoreKey]*Store),
 }
 
 func init() {
 	// TODO: put this initializing and server starting as an option
 	serverStore, _ := NewStore(ServerStore)
-	cache, err := NewCache[Server](serverStore, ServerCache)
+	cache, err := NewCache[Server](ServerStore, ServerCache)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -29,11 +29,11 @@ func init() {
 		return state.Config()
 	})
 
-	port := ":" + os.Getenv("STORE_PORT")
+	port := ":" + os.Getenv("MNEMO_PORT")
 	if port == ":" {
 		port = ":8080"
 	}
-	serverStore.Serve(port, "/store")
+	serverStore.Serve(port, "/servers")
 }
 
 type (
@@ -52,9 +52,9 @@ type (
 )
 
 func UseStore(key StoreKey) *Store {
-	StoreManager.mu.Lock()
-	defer StoreManager.mu.Unlock()
-	store, ok := StoreManager.stores[key]
+	strMgr.mu.Lock()
+	defer strMgr.mu.Unlock()
+	store, ok := strMgr.stores[key]
 	if !ok {
 		return nil
 	}
@@ -62,17 +62,17 @@ func UseStore(key StoreKey) *Store {
 }
 
 func NewStore(key StoreKey) (*Store, error) {
-	StoreManager.mu.Lock()
-	defer StoreManager.mu.Unlock()
+	strMgr.mu.Lock()
+	defer strMgr.mu.Unlock()
 	s := &Store{
 		key:      key,
 		data:     make(map[CacheKey]any),
 		Commands: NewCommands(),
 	}
-	if _, ok := StoreManager.stores[key]; ok {
+	if _, ok := strMgr.stores[key]; ok {
 		return nil, fmt.Errorf("store with key '%v' already exists", key)
 	}
-	StoreManager.stores[key] = s
+	strMgr.stores[key] = s
 	return s, nil
 }
 
@@ -82,11 +82,12 @@ func (s *Store) Serve(port string, path string) error {
 		return fmt.Errorf("empty store path for port: %s", port)
 	}
 
-	cfg := NewConfig(port, path, string(s.key))
+	cfg := NewServerConfig(port, path, string(s.key))
 	server, err := NewServer(cfg)
 	if err != nil {
 		return err
 	}
+	s.Server = server
 
 	caches, err := UseCache[Server](ServerStore, ServerCache)
 	if err != nil {
@@ -111,17 +112,21 @@ func (s *Store) Shutdown() {
 	item.Data.Shutdown()
 }
 
-func NewCache[Cache any](s *Store, key CacheKey) (*cache[Cache], error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func NewCache[Cache any](s StoreKey, key CacheKey) (*cache[Cache], error) {
+	store := UseStore(s)
+	if store == nil {
+		return nil, fmt.Errorf("no store with key '%v'", s)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
-	_, ok := s.data[key]
+	_, ok := store.data[key]
 	if ok {
 		return nil, fmt.Errorf("key '%v' already exists", key)
 	}
 
 	cs := newCache[Cache]()
-	s.data[key] = cs
+	store.data[key] = cs
 
 	return cs, nil
 }

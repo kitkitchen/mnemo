@@ -25,13 +25,13 @@ func TestNewStore(t *testing.T) {
 }
 
 func TestCreateStoreCache(t *testing.T) {
-	store, _ := NewStore("test")
-	key := "test"
-	_, err := NewCache[int](store, StoreKey(key))
+	var key StoreKey = "test"
+	NewStore(key)
+	_, err := NewCache[int](key, key)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = NewCache[int](store, StoreKey(key))
+	_, err = NewCache[int](key, key)
 	if err == nil {
 		t.Error("expected duplicate key error")
 	}
@@ -40,16 +40,16 @@ func TestCreateStoreCache(t *testing.T) {
 // TODO: Update with t.Run flags
 func TestUseStoreCache(t *testing.T) {
 	//TODO: Need TestMain to set up base store from init in store.go
-	store, _ := NewStore("test")
-	key := "test"
-	cache, err := NewCache[int](store, StoreKey(key))
+	var key StoreKey = "test"
+	NewStore("test")
+	cache, err := NewCache[int](key, key)
 	if err != nil {
 		t.Error(err)
 	}
 
 	data := 123
 	cache.Cache(&data, key)
-	cache, err = UseCache[int]("test", StoreKey(key))
+	cache, err = UseCache[int](key, key)
 	if err != nil {
 		t.Error(err)
 	}

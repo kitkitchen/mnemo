@@ -1,4 +1,4 @@
-## Store
+## Mnemo
 
 MIT License
 
