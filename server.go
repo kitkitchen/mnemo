@@ -1,113 +1,132 @@
 package mnemo
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"sync"
-
-	"github.com/labstack/echo/v4"
+	"time"
 )
 
 var srvMgr = &srvManager{
-	servers: make(map[string]*Server),
+	servers: make(map[int]*Server),
 }
 
 type (
 	srvManager struct {
-		mu      sync.Mutex
-		servers map[string]*Server
+		mu sync.Mutex
+		// Servers stored by port
+		servers map[int]*Server
 	}
 	Server struct {
-		app             *echo.Echo
+		*http.Server
+		context.Context
 		cfg             serverConfig
 		msgs            chan []byte
 		onNewConnection func(c *Conn)
 		ConnectionPool  *Pool
 	}
+	ServerOpt    func(*Server)
 	serverConfig struct {
-		Port string
-		Path string
-		Key  string
+		Port    int
+		Pattern string
+		Key     string
 	}
 )
 
-func NewServer(cfg serverConfig) (*Server, error) {
-	if cfg.Path == "" {
-		return nil, fmt.Errorf("server path cannot root")
+func WithPort(port int) ServerOpt {
+	return func(s *Server) {
+		s.cfg.Port = port
+		s.Server.Addr = ":" + strconv.Itoa(port)
 	}
-	srvMgr.mu.Lock()
-	for port, sv := range srvMgr.servers {
-		if port == cfg.Port {
-			return nil, fmt.Errorf("server with port %s already exists", cfg.Port)
-		}
-		if sv.cfg.Path == cfg.Path {
-			return nil, fmt.Errorf("server with path %s already exists", cfg.Path)
-		}
-		if sv.cfg.Key == cfg.Key {
-			return nil, fmt.Errorf("server with key %s already exists", cfg.Key)
-		}
-	}
+}
 
-	server := &Server{
-		app:            echo.New(),
+func WithPattern(pattern string) ServerOpt {
+	return func(s *Server) {
+		s.cfg.Pattern = pattern
+	}
+}
+
+func NewServer(key string, opts ...ServerOpt) (*Server, error) {
+	mux := http.NewServeMux()
+	cfg := serverConfig{
+		Key:  key,
+		Port: srvMgr.AssignPort(),
+	}
+	srv := &Server{
+		Server: &http.Server{
+			Addr:           ":" + strconv.Itoa(cfg.Port),
+			Handler:        mux,
+			ReadTimeout:    10 * time.Second,
+			WriteTimeout:   10 * time.Second,
+			MaxHeaderBytes: 1 << 20,
+		},
 		cfg:            cfg,
 		msgs:           make(chan []byte, 16),
 		ConnectionPool: NewPool(),
 	}
 
-	srvMgr.servers[server.cfg.Port] = server
-	srvMgr.mu.Unlock()
-
-	ws := server.app.Group(cfg.Path + "/ws")
-	ws.GET("/subscribe", server.handleSubscribe)
-
-	return server, nil
-}
-
-func NewServerConfig(port, path, key string) serverConfig {
-	//TODO: Use functional config
-	return serverConfig{
-		port, path, key,
+	for _, o := range opts {
+		o(srv)
 	}
+
+	srvMgr.mu.Lock()
+	defer srvMgr.mu.Unlock()
+
+	for port, sv := range srvMgr.servers {
+		if port == srv.cfg.Port {
+			return nil, fmt.Errorf("server with port '%d' already exists", srv.cfg.Port)
+		}
+		if sv.cfg.Pattern == srv.cfg.Pattern {
+			return nil, fmt.Errorf("server with pattern '%s' already exists", srv.cfg.Pattern)
+		}
+		if sv.cfg.Key == srv.cfg.Key {
+			return nil, fmt.Errorf("server with key '%s' already exists", srv.cfg.Key)
+		}
+	}
+	srvMgr.servers[srv.cfg.Port] = srv
+
+	mux.HandleFunc(srv.cfg.Pattern+"/ws/subscribe", srv.HandleSubscribe)
+
+	return srv, nil
 }
 
-func (s *Server) Config() serverConfig {
-	return s.cfg
-}
-
-func (s *Server) listenAndServe() {
-	go s.app.Start(s.cfg.Port)
+func (s *Server) ListenAndServe() {
+	go s.Server.ListenAndServe()
 }
 
 func (s *Server) Shutdown() error {
 	srvMgr.mu.Lock()
 	delete(srvMgr.servers, s.cfg.Port)
 	srvMgr.mu.Unlock()
-	err := s.app.Close()
+	err := s.Server.Shutdown(s.Context)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Server) handleSubscribe(ctx echo.Context) error {
-	conn, err := NewConnection(ctx)
+func (s *Server) HandleSubscribe(w http.ResponseWriter, r *http.Request) {
+	conn, err := NewConnection(w, r)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
+	defer conn.Close()
+
 	if err := s.ConnectionPool.AddConnection(conn); err != nil {
-		return err
+		log.Fatal(err)
 	}
 	// Trigger user defined call back on new connection
 	if s.onNewConnection != nil {
 		go s.onNewConnection(conn)
 	}
 	conn.Listen()
-	return conn.Close()
 }
 
-func (s *Server) SetOnNewConnection(callback func(c *Conn)) {
-	s.onNewConnection = callback
+func (s *Server) SetOnNewConnection(fn func(c *Conn)) {
+	s.onNewConnection = fn
 }
 
 func (s *Server) Publish(msg interface{}) {
@@ -119,4 +138,14 @@ func (s *Server) Publish(msg interface{}) {
 			conn.Close()
 		}
 	}
+}
+
+func (s *srvManager) AssignPort() int {
+	next := 8080
+	for port := range s.servers {
+		if next < port {
+			next = port + 1
+		}
+	}
+	return next
 }

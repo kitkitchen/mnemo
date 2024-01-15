@@ -13,7 +13,7 @@ func Example() {
 func TestNewStore(t *testing.T) {
 	store, _ := NewStore("test")
 	storeType := reflect.TypeOf(store)
-	expected := "*store.Store"
+	expected := "*mnemo.Store"
 	actual := storeType.String()
 	if actual != expected {
 		t.Errorf("expected NewStore to be of type %v; got %v", expected, actual)
@@ -37,11 +37,11 @@ func TestCreateStoreCache(t *testing.T) {
 	}
 }
 
-// TODO: Update with t.Run flags
+// TODO: This requires set up and teardown with new key retrieval mechanism
 func TestUseStoreCache(t *testing.T) {
 	//TODO: Need TestMain to set up base store from init in store.go
 	var key StoreKey = "test"
-	NewStore("test")
+	NewStore(key)
 	cache, err := NewCache[int](key, key)
 	if err != nil {
 		t.Error(err)

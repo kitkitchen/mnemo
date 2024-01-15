@@ -192,21 +192,26 @@ func (c *cache[T]) ReducerHistory() []reducerHistory[any] {
 	return rh
 }
 
-func (c *cache[T]) Get(key CacheKey) (*Item[T], bool) {
+func (c *cache[T]) Get(key CacheKey) (Item[T], bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	data := c.raw.caches[key]
 	if data == nil {
-		return nil, false
+		return *new(Item[T]), false
 	}
-	return data, true
+	return *data, true
 }
 
-func (c *cache[T]) GetAll() map[CacheKey]*Item[T] {
+// TODO: ensure this copy works
+func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.raw.caches
+	cache := make(map[CacheKey]Item[T])
+	for key, item := range c.raw.caches {
+		cache[key] = *item
+	}
+	return cache
 }
 
 func (c *cache[T]) Cache(data *T, key CacheKey) error {
@@ -246,6 +251,19 @@ func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 		cfg.timeoutFun(cache.Data)
 	}()
 	return nil
+}
+
+func (c *cache[T]) Update(key CacheKey, update Item[T]) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, ok := c.raw.caches[key]
+	if !ok {
+		return false
+	}
+	//TODO: ensure this is being updated in reducer
+	c.raw.caches[key] = &update
+	return true
 }
 
 func (c *cache[T]) Delete(key interface{}) error {

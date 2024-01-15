@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
 )
 
 type (
@@ -19,11 +18,14 @@ type (
 	}
 )
 
-func NewConnection(ctx echo.Context) (*Conn, error) {
+func NewConnection(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	upgrader := websocket.Upgrader{}
-	websocket, err := upgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
+	websocket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError)
+		return nil, ConnError{
+			StatusCode: http.StatusInternalServerError,
+			Err:        err,
+		}
 	}
 
 	c := &Conn{

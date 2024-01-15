@@ -9,7 +9,7 @@ import (
 func TestNewCache(t *testing.T) {
 	cache := newCache[int]()
 	cacheType := reflect.TypeOf(cache)
-	expected := "*store.cache[int]"
+	expected := "*mnemo.cache[int]"
 	if cacheType.String() != expected {
 		t.Errorf("invalid return type %v; expected %v", cacheType, expected)
 	}
@@ -35,7 +35,7 @@ func TestGet(t *testing.T) {
 	if ok {
 		t.Errorf("expected ok to be false with invalid key")
 	}
-	if noData != nil {
+	if noData.Data != nil {
 		t.Errorf("expected data result with invalid key to be nil")
 	}
 }
