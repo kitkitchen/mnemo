@@ -3,55 +3,65 @@ package mnemo
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 )
 
 type (
+	// cache is a collection of data that can be cached and reduced.
 	cache[T any] struct {
 		mu        sync.Mutex
 		createdAt time.Time
 		raw       *raw[T]
 		reducer   *reducer[T]
 	}
+	// raw is a collection of cached data, it's history, and a feed of live updates
+	// prior to reduction.
 	raw[T any] struct {
 		caches  map[CacheKey]*Item[T]
 		history map[time.Time]map[CacheKey]Item[T]
 		feed    chan map[time.Time]map[CacheKey]Item[T]
 	}
+	// reducer is a collection of reduced data, it's history, and a feed of live updates
 	reducer[T any] struct {
 		reduce  *func([]reducerCache[T]) []reducerCache[any]
 		history map[time.Time][]reducerCache[any]
 		feed    chan reducerFeed[any]
 	}
+	// Item holds cached data and the time it was cached.
 	Item[T any] struct {
 		CreatedAt time.Time `json:"created_at"`
 		Data      *T        `json:"data"`
 	}
+	// cacheTimeoutConfig is a configuration for caching data with a timeout.
 	cacheTimeoutConfig[T any] struct {
 		data       *T
 		key        any
 		timeoutFun func(data *T)
 		timeout    time.Duration
 	}
-	CacheKey                  any
+	// CacheKey is a unique identifier for a cache.
+	CacheKey any
+	// ReducerFunc is a function that takes a cache and returns a reduced version of it.
+	//
+	// It is run against the raw cache on every change and must return json serializable data.
 	ReducerFunc[T any, U any] func(state T) (mutation U)
-	ReducerConfig[T any]      struct {
-		CreatedAt time.Time
-		Data      []reducerCache[T]
-	}
-	reducerCache[T any] struct {
+	// reducerCache wraps a reduced cache with it's key and creation time.
+	reducerCache[U any] struct {
 		Key       CacheKey  `json:"key"`
 		CreatedAt time.Time `json:"created_at"`
-		Data      T         `json:"data"`
+		Data      U         `json:"data"`
 	}
-	reducerFeed[T any] struct {
+	// reducerFeed is sent to the reducer's feed channel on every change.
+	reducerFeed[U any] struct {
 		CreatedAt time.Time         `json:"created_at"`
-		Cache     []reducerCache[T] `json:"cache"`
+		Cache     []reducerCache[U] `json:"cache"`
 	}
 	reducerHistory[T any] reducerFeed[T]
 )
 
+// newCache is an internal implementation of NewCache
 func newCache[T any]() (data *cache[T]) {
 	c := &cache[T]{
 		createdAt: time.Now(),
@@ -68,9 +78,12 @@ func newCache[T any]() (data *cache[T]) {
 	return c
 }
 
+// monitorChanges monitors changes to the raw cache and caches the raw cache and it's reduction.
 func (c *cache[T]) monitorChanges(setup chan bool) {
+	// cache initial state and confirm setup is complete
 	pRaw := c.copyRaw()
 	setup <- true
+
 	prev := c.reduce(pRaw)
 	t := time.Now()
 	c.cacheRaw(t, pRaw)
@@ -78,6 +91,8 @@ func (c *cache[T]) monitorChanges(setup chan bool) {
 	for {
 		raw := c.copyRaw()
 		current := c.reduce(raw)
+		// TODO: Maybe be able to reduce this to a single comparison
+		// by converting the reduced cache to a string
 		if !reflect.DeepEqual(prev, current) {
 			t := time.Now()
 			c.cacheRaw(t, raw)
@@ -87,6 +102,7 @@ func (c *cache[T]) monitorChanges(setup chan bool) {
 	}
 }
 
+// copyRaw copies the raw cache.
 func (c *cache[T]) copyRaw() map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -97,6 +113,7 @@ func (c *cache[T]) copyRaw() map[CacheKey]Item[T] {
 	return copy
 }
 
+// cacheRaw caches the raw cache.
 func (c *cache[T]) cacheRaw(t time.Time, copy map[CacheKey]Item[T]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -104,6 +121,7 @@ func (c *cache[T]) cacheRaw(t time.Time, copy map[CacheKey]Item[T]) {
 	c.raw.feed <- c.raw.history
 }
 
+// newCacheReducer wraps a user defined reducer function with reducerCache meta data.
 func newCacheReducer[T, U any](f ReducerFunc[T, U]) func([]reducerCache[T]) []reducerCache[U] {
 	return func(rdt []reducerCache[T]) []reducerCache[U] {
 		rdu := []reducerCache[U]{}
@@ -117,6 +135,8 @@ func newCacheReducer[T, U any](f ReducerFunc[T, U]) func([]reducerCache[T]) []re
 		return rdu
 	}
 }
+
+// reduce implements the user defined reducer function.
 func (c *cache[T]) reduce(copy map[CacheKey]Item[T]) []reducerCache[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -133,18 +153,24 @@ func (c *cache[T]) reduce(copy map[CacheKey]Item[T]) []reducerCache[any] {
 	return reduce(data)
 }
 
+// cacheReduction caches the reduced cache.
 func (c *cache[T]) cacheReduction(t time.Time, r []reducerCache[any]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	//sort by createdAt
+	sort.Slice(r, func(i, j int) bool {
+		return r[i].CreatedAt.Before(r[j].CreatedAt)
+	})
 	c.reducer.history[t] = r
-	rf := reducerFeed[any]{}
-	for _, k := range r {
-		//TODO sort by createdAt
-		rf.Cache = append(rf.Cache, k)
-	}
+	rf := reducerFeed[any]{CreatedAt: t, Cache: r}
 	c.reducer.feed <- rf
 }
 
+// SetReducer sets the user defined reducer function and starts monitoring changes.
+//
+// Setting a reducer is mandatory for triggering change monitoring. DefaultReducer is available but
+// merely returns the raw cache so it is not recommended if you are caching complex data types that cannot
+// not be serialized to json.
 func (c *cache[T]) SetReducer(rf ReducerFunc[T, any]) {
 	cr := newCacheReducer(rf)
 	c.mu.Lock()
@@ -157,28 +183,33 @@ func (c *cache[T]) SetReducer(rf ReducerFunc[T, any]) {
 	<-setup
 }
 
+// DefaultReducer is a reducer that returns the raw cache.
 func (c *cache[T]) DefaultReducer(state T) (mutation any) {
 	return state
 }
 
+// RawFeed returns a channel of the raw cache updates.
 func (c *cache[T]) RawFeed() chan map[time.Time]map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.raw.feed
 }
 
+// ReducerFeed returns a channel of the reduced cache updates.
 func (c *cache[T]) ReducerFeed() chan reducerFeed[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reducer.feed
 }
 
+// RawHistory returns the raw cache history.
 func (c *cache[T]) RawHistory() map[time.Time]map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.raw.history
 }
 
+// ReducerHistory returns the reduced cache history.
 func (c *cache[T]) ReducerHistory() []reducerHistory[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -192,6 +223,7 @@ func (c *cache[T]) ReducerHistory() []reducerHistory[any] {
 	return rh
 }
 
+// Get returns a cache by key.
 func (c *cache[T]) Get(key CacheKey) (Item[T], bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -203,7 +235,7 @@ func (c *cache[T]) Get(key CacheKey) (Item[T], bool) {
 	return *data, true
 }
 
-// TODO: ensure this copy works
+// GetAll returns all caches.
 func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -214,6 +246,7 @@ func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
 	return cache
 }
 
+// Cache caches data by key.
 func (c *cache[T]) Cache(data *T, key CacheKey) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -229,6 +262,7 @@ func (c *cache[T]) Cache(data *T, key CacheKey) error {
 	return nil
 }
 
+// TODO: Convert to option
 func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 	c.Cache(cfg.data, cfg.key)
 	if !(cfg.timeout > time.Second*0) {
@@ -240,19 +274,21 @@ func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 	go func() {
 		timer := time.NewTimer(cfg.timeout)
 		<-timer.C
-		cache, ok := c.Get(cfg.key)
+		item, ok := c.Get(cfg.key)
 		if !ok {
 			logger.Fatalf("could not get cache with key %v", cfg.key)
 		}
 		err := c.Delete(cfg.key)
 		if err != nil {
-			logger.Fatal(err)
+			NewError[cache[T]](err.Error())
+			return
 		}
-		cfg.timeoutFun(cache.Data)
+		cfg.timeoutFun(item.Data)
 	}()
 	return nil
 }
 
+// Update updates a cache with a new value. It returns false if the cache does not exist.
 func (c *cache[T]) Update(key CacheKey, update Item[T]) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -266,6 +302,7 @@ func (c *cache[T]) Update(key CacheKey, update Item[T]) bool {
 	return true
 }
 
+// Delete deletes a cache by key.
 func (c *cache[T]) Delete(key interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -277,6 +314,8 @@ func (c *cache[T]) Delete(key interface{}) error {
 	return nil
 }
 
+// NewCacheTimeoutConfig creates a new cacheTimeoutConfig.
+// TODO: Convert to option
 func NewCacheTimeoutConfig[T any](
 	data *T,
 	key interface{},

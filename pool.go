@@ -5,24 +5,28 @@ import (
 	"sync"
 )
 
+// Pool is a collection of Conns
 type Pool struct {
 	mu    sync.Mutex
 	conns map[interface{}]*Conn
 }
 
+// NewPool creates a new pool of Conns
 func NewPool() *Pool {
 	return &Pool{
 		conns: make(map[interface{}]*Conn),
 	}
 }
 
-func (p *Pool) Connections() map[interface{}]*Conn {
+// Conns returns a map of the pool's Conns
+func (p *Pool) Conns() map[interface{}]*Conn {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.conns
 }
 
-func (p *Pool) AddConnection(c *Conn) error {
+// AddConn adds a Conn to the pool
+func (p *Pool) AddConn(c *Conn) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_, ok := p.conns[c.Key]
@@ -34,6 +38,7 @@ func (p *Pool) AddConnection(c *Conn) error {
 	return nil
 }
 
+// RemoveConn removes a Conn from the pool
 func (p *Pool) removeConnection(c *Conn) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

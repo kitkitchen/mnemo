@@ -1,8 +1,6 @@
 package mnemo
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -10,6 +8,7 @@ import (
 )
 
 type (
+	// Conn is a websocket connection with a unique key, a pointer to a pool, and a channel for messages.
 	Conn struct {
 		websocket *websocket.Conn
 		Pool      *Pool
@@ -18,14 +17,13 @@ type (
 	}
 )
 
-func NewConnection(w http.ResponseWriter, r *http.Request) (*Conn, error) {
+// NewConn creates upgrades an http connection to a websocket connection and returns a Conn
+// or an error if the upgrade fails.
+func NewConn(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	upgrader := websocket.Upgrader{}
 	websocket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return nil, ConnError{
-			StatusCode: http.StatusInternalServerError,
-			Err:        err,
-		}
+		return nil, NewError[Conn](err.Error()).WithStatus(http.StatusInternalServerError)
 	}
 
 	c := &Conn{
@@ -36,15 +34,18 @@ func NewConnection(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	return c, nil
 }
 
+// Close closes the websocket connection and removes the Conn from the pool.
+// It returns an error if the Conn is nil.
 func (c *Conn) Close() error {
 	if c == nil {
-		return fmt.Errorf("attemped to close nil Connection")
+		return NewError[Conn]("connection is nil")
 	}
 	c.Pool.removeConnection(c)
 	c.websocket.Close()
 	return nil
 }
 
+// Listen listens for messages on the Conn's Messages channel and writes them to the websocket connection.
 func (c *Conn) Listen() {
 	go func(c *Conn) {
 		for {
@@ -55,7 +56,7 @@ func (c *Conn) Listen() {
 					websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure,
 				) {
-					log.Println(err)
+					NewError[Conn](err.Error()).Log()
 				}
 				close(c.Messages)
 				break
@@ -71,12 +72,13 @@ func (c *Conn) Listen() {
 		}
 
 		if err := c.websocket.WriteJSON(msg); err != nil {
-			log.Println(err)
+			NewError[Conn](err.Error()).Log()
 			c.Close()
 		}
 	}
 }
 
+// Publish publishes a message to the Conn's Messages channel.
 func (c *Conn) Publish(msg interface{}) {
 	c.Messages <- msg
 }
