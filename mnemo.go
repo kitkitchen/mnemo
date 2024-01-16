@@ -21,7 +21,7 @@ func New(opts ...Opt[Mnemo]) *Mnemo {
 	return m
 }
 
-// WithServer sets the server for the Mnemo instance.
+// WithServer sets the server for the Mnemo instance from the NewServer function.
 func WithServer(key string, opts ...Opt[Server]) Opt[Mnemo] {
 	srv, err := NewServer(key, opts...)
 	if err != nil {

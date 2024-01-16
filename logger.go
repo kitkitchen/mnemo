@@ -15,7 +15,7 @@ const (
 	Panic
 )
 
-var logger = NewCharmLogger("Mnemo: ")
+var logger = newcharmLogger("Mnemo: ")
 
 type (
 	LogLevel int
@@ -26,37 +26,38 @@ type (
 		Error(string)
 		Fatal(string)
 	}
-	CharmLogger struct {
+	charmLogger struct {
 		*log.Logger
 	}
 )
 
-func NewCharmLogger(prefix string) *CharmLogger {
+// newcharmLogger wraps charmbracelet/log to implement the Logger interface
+func newcharmLogger(prefix string) *charmLogger {
 	l := log.NewWithOptions(os.Stderr, log.Options{
 		ReportCaller:    true,
 		ReportTimestamp: true,
 		TimeFormat:      time.Kitchen,
 		Prefix:          prefix,
 	})
-	return &CharmLogger{l}
+	return &charmLogger{l}
 }
 
-func (l *CharmLogger) Info(msg string) {
+func (l *charmLogger) Info(msg string) {
 	l.Logger.Info(msg)
 }
 
-func (l *CharmLogger) Debug(msg string) {
+func (l *charmLogger) Debug(msg string) {
 	l.Logger.Debug(msg)
 }
 
-func (l *CharmLogger) Warn(msg string) {
+func (l *charmLogger) Warn(msg string) {
 	l.Logger.Warn(msg)
 }
 
-func (l *CharmLogger) Error(msg string) {
+func (l *charmLogger) Error(msg string) {
 	l.Logger.Error(msg)
 }
 
-func (l *CharmLogger) Fatal(msg string) {
+func (l *charmLogger) Fatal(msg string) {
 	l.Logger.Fatal(msg)
 }

@@ -1,4 +1,3 @@
-// Package store blah blah blah
 package mnemo
 
 import (
