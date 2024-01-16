@@ -20,15 +20,15 @@ type (
 		// Servers stored by port
 		servers map[int]*Server
 	}
+	// Server is a websocket server that manages connections and messages.
 	Server struct {
-		*http.Server
+		http *http.Server
 		context.Context
 		cfg             serverConfig
 		msgs            chan []byte
 		onNewConnection func(c *Conn)
-		ConnectionPool  *Pool
+		connPool        *Pool
 	}
-	ServerOpt    func(*Server)
 	serverConfig struct {
 		Port    int
 		Pattern string
@@ -36,36 +36,43 @@ type (
 	}
 )
 
-func WithPort(port int) ServerOpt {
+// WithPort sets the port for the server.
+func WithPort(port int) Opt[Server] {
 	return func(s *Server) {
 		s.cfg.Port = port
-		s.Server.Addr = ":" + strconv.Itoa(port)
+		s.http.Addr = ":" + strconv.Itoa(port)
 	}
 }
 
-func WithPattern(pattern string) ServerOpt {
+// WithPattern sets the pattern for the server's http handler.
+func WithPattern(pattern string) Opt[Server] {
 	return func(s *Server) {
 		s.cfg.Pattern = pattern
 	}
 }
 
-func NewServer(key string, opts ...ServerOpt) (*Server, error) {
+// NewServer creates a new server.
+
+// The server's key must be unique. If a server with the same key
+// already exists, an error is returned.
+func NewServer(key string, opts ...Opt[Server]) (*Server, error) {
 	mux := http.NewServeMux()
 	cfg := serverConfig{
 		Key:  key,
 		Port: srvMgr.AssignPort(),
 	}
 	srv := &Server{
-		Server: &http.Server{
+		http: &http.Server{
 			Addr:           ":" + strconv.Itoa(cfg.Port),
 			Handler:        mux,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
 			MaxHeaderBytes: 1 << 20,
 		},
-		cfg:            cfg,
-		msgs:           make(chan []byte, 16),
-		ConnectionPool: NewPool(),
+		Context:  context.Background(),
+		cfg:      cfg,
+		msgs:     make(chan []byte, 16),
+		connPool: NewPool(),
 	}
 
 	for _, o := range opts {
@@ -79,43 +86,44 @@ func NewServer(key string, opts ...ServerOpt) (*Server, error) {
 		if port == srv.cfg.Port {
 			return nil, fmt.Errorf("server with port '%d' already exists", srv.cfg.Port)
 		}
-		if sv.cfg.Pattern == srv.cfg.Pattern {
-			return nil, fmt.Errorf("server with pattern '%s' already exists", srv.cfg.Pattern)
-		}
 		if sv.cfg.Key == srv.cfg.Key {
 			return nil, fmt.Errorf("server with key '%s' already exists", srv.cfg.Key)
 		}
 	}
 	srvMgr.servers[srv.cfg.Port] = srv
 
-	mux.HandleFunc(srv.cfg.Pattern+"/ws/subscribe", srv.HandleSubscribe)
+	mux.HandleFunc(srv.cfg.Pattern+"/subscribe", srv.HandleSubscribe)
 
 	return srv, nil
 }
 
+// ListenAndServe starts the server in a go routine
 func (s *Server) ListenAndServe() {
-	go s.Server.ListenAndServe()
+	go s.http.ListenAndServe()
 }
 
+// Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
 	srvMgr.mu.Lock()
 	delete(srvMgr.servers, s.cfg.Port)
 	srvMgr.mu.Unlock()
-	err := s.Server.Shutdown(s.Context)
+	err := s.http.Shutdown(s.Context)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
+// HandleSubscribe upgrades the http connection to a websocket connection
+// and adds the connection to the connection pool.
 func (s *Server) HandleSubscribe(w http.ResponseWriter, r *http.Request) {
-	conn, err := NewConnection(w, r)
+	conn, err := NewConn(w, r)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
 
-	if err := s.ConnectionPool.AddConnection(conn); err != nil {
+	if err := s.connPool.AddConn(conn); err != nil {
 		log.Fatal(err)
 	}
 	// Trigger user defined call back on new connection
@@ -125,12 +133,17 @@ func (s *Server) HandleSubscribe(w http.ResponseWriter, r *http.Request) {
 	conn.Listen()
 }
 
+// SetOnNewConnection sets a user defined call back function
+// when a new connection is established.
+//
+// Mnemo must be initialized with a server before calling this method.
 func (s *Server) SetOnNewConnection(fn func(c *Conn)) {
 	s.onNewConnection = fn
 }
 
+// Publish publishes a message to all connections in the connection pool.
 func (s *Server) Publish(msg interface{}) {
-	for _, conn := range s.ConnectionPool.Connections() {
+	for _, conn := range s.connPool.Conns() {
 		select {
 		case conn.Messages <- msg:
 		default:
@@ -140,6 +153,10 @@ func (s *Server) Publish(msg interface{}) {
 	}
 }
 
+// AssignPort assigns a port to the server.
+//
+// Port is assigned by incrementing the highest port number
+// in the server manager's servers map, starting at 8080.
 func (s *srvManager) AssignPort() int {
 	next := 8080
 	for port := range s.servers {
