@@ -8,14 +8,15 @@ import (
 )
 
 const (
-	Debug LogLevel = iota
+	Err LogLevel = iota
+	Debug
 	Info
 	Warn
 	Fatal
 	Panic
 )
 
-var logger = newcharmLogger("Mnemo: ")
+var logger = newcharmLogger("Mnemo")
 
 type (
 	LogLevel int
@@ -34,7 +35,7 @@ type (
 // newcharmLogger wraps charmbracelet/log to implement the Logger interface
 func newcharmLogger(prefix string) *charmLogger {
 	l := log.NewWithOptions(os.Stderr, log.Options{
-		ReportCaller:    true,
+		ReportCaller:    false,
 		ReportTimestamp: true,
 		TimeFormat:      time.Kitchen,
 		Prefix:          prefix,

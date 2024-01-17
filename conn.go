@@ -1,6 +1,7 @@
 package mnemo
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ type (
 	}
 )
 
-// NewConn creates upgrades an http connection to a websocket connection and returns a Conn
+// NewConn upgrades an http connection to a websocket connection and returns a Conn
 // or an error if the upgrade fails.
 func NewConn(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	upgrader := websocket.Upgrader{}
@@ -80,5 +81,11 @@ func (c *Conn) Listen() {
 
 // Publish publishes a message to the Conn's Messages channel.
 func (c *Conn) Publish(msg interface{}) {
+	// if msg is not json encodable, return
+	_, err := json.Marshal(msg)
+	if err != nil {
+		NewError[Conn](err.Error()).Log()
+		return
+	}
 	c.Messages <- msg
 }

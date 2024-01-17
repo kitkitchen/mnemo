@@ -19,7 +19,7 @@ func TestGet(t *testing.T) {
 	cache := newCache[int]()
 	expected := 1
 	key := "one"
-	err := cache.Cache(&expected, key)
+	err := cache.Cache(key, &expected)
 	if err != nil {
 		t.Error(err)
 	}
@@ -44,7 +44,7 @@ func TestAll(t *testing.T) {
 	cache := newCache[int]()
 	nums := []int{1, 2, 3, 4, 5, 6, 7, 8}
 	for k := range nums {
-		err := cache.Cache(&nums[k], k)
+		err := cache.Cache(k, &nums[k])
 		if err != nil {
 			t.Error(err)
 		}
@@ -65,13 +65,13 @@ func TestCache(t *testing.T) {
 	cache := newCache[int]()
 	nums := []int{1, 2, 3, 4, 5, 6, 7, 8}
 	for k := range nums {
-		err := cache.Cache(&nums[k], k)
+		err := cache.Cache(k, &nums[k])
 		if err != nil {
 			t.Error(err)
 		}
 	}
 	for k := range nums {
-		err := cache.Cache(&nums[k], k)
+		err := cache.Cache(k, &nums[k])
 		if err == nil {
 			t.Error("expected duplicate key error")
 		}
@@ -108,7 +108,7 @@ func TestDelete(t *testing.T) {
 	cache := newCache[int]()
 	nums := []int{1, 2, 3, 4, 5, 6, 7, 8}
 	for k := range nums {
-		err := cache.Cache(&nums[k], k)
+		err := cache.Cache(k, &nums[k])
 		if err != nil {
 			t.Error(err)
 		}

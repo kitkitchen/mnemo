@@ -23,6 +23,10 @@ func NewError[T any](msg string, opts ...Opt[Error[T]]) Error[T] {
 	return e
 }
 
+func (e Error[T]) Type() string {
+	return fmt.Sprintf("%T", e)
+}
+
 // Error implements the error interface.
 func (e Error[T]) Error() string {
 	return fmt.Sprintf("%v error: %v", new(T), e.Err.Error())
@@ -33,21 +37,24 @@ func (e Error[T]) IsStatusError() bool {
 	return e.Status != 0
 }
 
-// Log logs the error to the logger by log level.
+// Log logs the error by level.
 func (e Error[T]) Log() {
+	err := fmt.Sprintf("%T error: %v", e, e.Err.Error())
 	switch e.level {
+	case Err:
+		e.Logger.Error(err)
 	case Debug:
-		e.Logger.Debug(e.Err.Error())
+		e.Logger.Debug(err)
 	case Info:
-		e.Logger.Info(e.Err.Error())
+		e.Logger.Info(err)
 	case Warn:
-		e.Logger.Warn(e.Err.Error())
+		e.Logger.Warn(err)
 	case Fatal:
-		e.Logger.Fatal(e.Err.Error())
+		e.Logger.Fatal(err)
 	case Panic:
-		panic(e.Err.Error())
+		panic(err)
 	default:
-		e.Logger.Error(e.Err.Error())
+		e.Logger.Error(err)
 	}
 }
 
