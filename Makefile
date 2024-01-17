@@ -5,4 +5,4 @@ run:
 	bin/mnemo
 
 publish:
-	GOPROXY=proxy.golang.org go list -m github.com/kitkitchen/mnemo@v.0.0.2-beta
+	GOPROXY=proxy.golang.org go list -m github.com/kitkitchen/mnemo@v0.0.1-beta.1
