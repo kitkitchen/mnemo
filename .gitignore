@@ -1,5 +1,2 @@
 .DS_Store
-client/node_modules
-client/web-build
-main.go
-node_modules
+docs
