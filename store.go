@@ -20,7 +20,7 @@ type (
 		key      StoreKey
 		mnemo    *Mnemo
 		data     map[CacheKey]any
-		Commands Commands
+		commands Commands
 	}
 	// StoreKey is a unique identifier for a store.
 	StoreKey string
@@ -51,7 +51,7 @@ func NewStore(key StoreKey, opts ...Opt[Store]) (*Store, error) {
 	s := &Store{
 		key:      key,
 		data:     make(map[CacheKey]any),
-		Commands: NewCommands(),
+		commands: NewCommands(),
 	}
 
 	for _, o := range opts {
@@ -62,6 +62,10 @@ func NewStore(key StoreKey, opts ...Opt[Store]) (*Store, error) {
 	}
 	strMgr.stores[key] = s
 	return s, nil
+}
+
+func (s *Store) Commands() *Commands {
+	return &s.commands
 }
 
 // Key returns the store's key.

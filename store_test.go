@@ -1,14 +1,9 @@
 package mnemo
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 )
-
-func Example() {
-	fmt.Println("this is an example")
-}
 
 func TestNewStore(t *testing.T) {
 	store, _ := NewStore("test")

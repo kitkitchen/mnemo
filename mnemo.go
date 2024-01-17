@@ -26,7 +26,7 @@ func New(opts ...Opt[Mnemo]) *Mnemo {
 	return m
 }
 
-// WithServer applies a server to the Mnemo instance.
+// WithServer creates a server for the Mnemo instance.
 func (m *Mnemo) WithServer(key string, opts ...Opt[Server]) *Mnemo {
 	srv, err := NewServer(key, opts...)
 	if err != nil {
@@ -46,7 +46,7 @@ func (m *Mnemo) Server() *Server {
 }
 
 // WithStore adds one or more stores to the Mnemo instance.
-func (m *Mnemo) WithStore(keys ...StoreKey) *Mnemo {
+func (m *Mnemo) WithStores(keys ...StoreKey) *Mnemo {
 	for _, k := range keys {
 		m.stores[k] = true
 	}
