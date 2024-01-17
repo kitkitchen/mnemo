@@ -48,7 +48,7 @@ func TestUseStoreCache(t *testing.T) {
 	}
 
 	data := 123
-	cache.Cache(&data, key)
+	cache.Cache(key, &data)
 	cache, err = UseCache[int](key, key)
 	if err != nil {
 		t.Error(err)

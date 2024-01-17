@@ -22,7 +22,9 @@ type (
 	}
 	// Server is a websocket server that manages connections and messages.
 	Server struct {
-		http *http.Server
+		mu    sync.Mutex
+		mnemo *Mnemo
+		http  *http.Server
 		context.Context
 		cfg             serverConfig
 		msgs            chan []byte
@@ -36,8 +38,22 @@ type (
 	}
 )
 
+func (s *Server) withNemo(m *Mnemo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mnemo != nil {
+		NewError[Server]("mnemo already initialized").WithLogLevel(Fatal).Log()
+	}
+	s.mnemo = m
+}
+
 // WithPort sets the port for the server.
 func WithPort(port int) Opt[Server] {
+	if port < 1025 || port > 65535 {
+		NewError[Server](
+			fmt.Sprintf("port must be between 1025 and 65535. Got: %d", port),
+		).WithLogLevel(Fatal).Log()
+	}
 	return func(s *Server) {
 		s.cfg.Port = port
 		s.http.Addr = ":" + strconv.Itoa(port)
@@ -51,15 +67,23 @@ func WithPattern(pattern string) Opt[Server] {
 	}
 }
 
-// NewServer creates a new server.
+// WithSilence silences the server's http error log.
+func WithSilence() Opt[Server] {
+	return func(s *Server) {
+		s.http.ErrorLog = log.New(nil, "", 0)
+	}
+}
 
+// NewServer creates a new server.
+//
 // The server's key must be unique. If a server with the same key
 // already exists, an error is returned.
 func NewServer(key string, opts ...Opt[Server]) (*Server, error) {
 	mux := http.NewServeMux()
 	cfg := serverConfig{
-		Key:  key,
-		Port: srvMgr.AssignPort(),
+		Key:     key,
+		Port:    srvMgr.AssignPort(),
+		Pattern: "/" + key,
 	}
 	srv := &Server{
 		http: &http.Server{
@@ -68,6 +92,7 @@ func NewServer(key string, opts ...Opt[Server]) (*Server, error) {
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
 			MaxHeaderBytes: 1 << 20,
+			ErrorLog:       logger.StandardLog(),
 		},
 		Context:  context.Background(),
 		cfg:      cfg,
@@ -84,10 +109,10 @@ func NewServer(key string, opts ...Opt[Server]) (*Server, error) {
 
 	for port, sv := range srvMgr.servers {
 		if port == srv.cfg.Port {
-			return nil, fmt.Errorf("server with port '%d' already exists", srv.cfg.Port)
+			return nil, NewError[Server](fmt.Sprintf("server with port '%d' already exists", srv.cfg.Port))
 		}
 		if sv.cfg.Key == srv.cfg.Key {
-			return nil, fmt.Errorf("server with key '%s' already exists", srv.cfg.Key)
+			return nil, NewError[Server](fmt.Sprintf("server with key '%s' already exists", srv.cfg.Key))
 		}
 	}
 	srvMgr.servers[srv.cfg.Port] = srv
@@ -99,15 +124,24 @@ func NewServer(key string, opts ...Opt[Server]) (*Server, error) {
 
 // ListenAndServe starts the server in a go routine
 func (s *Server) ListenAndServe() {
+	s.http.RegisterOnShutdown(func() {
+		s.connPool.Close()
+	})
+	// print server info
+	logger.Infof("server listening on port %d", s.cfg.Port)
 	go s.http.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
+	// Remove server from server manager
 	srvMgr.mu.Lock()
 	delete(srvMgr.servers, s.cfg.Port)
 	srvMgr.mu.Unlock()
+
+	s.mu.Lock()
 	err := s.http.Shutdown(s.Context)
+	s.mu.Unlock()
 	if err != nil {
 		return err
 	}

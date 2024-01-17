@@ -38,6 +38,14 @@ func (p *Pool) AddConn(c *Conn) error {
 	return nil
 }
 
+func (p *Pool) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, c := range p.conns {
+		c.Close()
+	}
+}
+
 // RemoveConn removes a Conn from the pool
 func (p *Pool) removeConnection(c *Conn) {
 	p.mu.Lock()

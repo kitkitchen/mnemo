@@ -247,7 +247,7 @@ func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
 }
 
 // Cache caches data by key.
-func (c *cache[T]) Cache(data *T, key CacheKey) error {
+func (c *cache[T]) Cache(key CacheKey, data *T) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -264,7 +264,7 @@ func (c *cache[T]) Cache(data *T, key CacheKey) error {
 
 // TODO: Convert to option
 func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
-	c.Cache(cfg.data, cfg.key)
+	c.Cache(cfg.key, cfg.data)
 	if !(cfg.timeout > time.Second*0) {
 		return fmt.Errorf(
 			"cache not set for timeout: %v; timeout must be greater than 0", cfg.timeout,

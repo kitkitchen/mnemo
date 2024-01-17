@@ -16,9 +16,9 @@ type (
 	}
 	// Store is a collection of caches.
 	Store struct {
-		mu sync.Mutex
-		*Server
+		mu       sync.Mutex
 		key      StoreKey
+		mnemo    *Mnemo
 		data     map[CacheKey]any
 		Commands Commands
 	}
@@ -69,6 +69,10 @@ func (s *Store) Key() StoreKey {
 	return s.key
 }
 
+func (s *Store) Mnemo() *Mnemo {
+	return s.mnemo
+}
+
 // UseStore returns a store by key or an error if the store does not exist.
 func UseStore(key StoreKey) (*Store, error) {
 	strMgr.mu.Lock()
@@ -105,8 +109,6 @@ func UseCache[Cache any](s StoreKey, c CacheKey) (*cache[Cache], error) {
 	if err != nil {
 		return nil, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
 
 	// Check if cache exists
 	data, err := store.getCache(c)
