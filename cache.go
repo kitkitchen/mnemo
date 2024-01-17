@@ -289,16 +289,16 @@ func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 }
 
 // Update updates a cache with a new value. It returns false if the cache does not exist.
-func (c *cache[T]) Update(key CacheKey, update Item[T]) bool {
+func (c *cache[T]) Update(key CacheKey, update T) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	_, ok := c.raw.caches[key]
+	prev, ok := c.raw.caches[key]
 	if !ok {
 		return false
 	}
 	//TODO: ensure this is being updated in reducer
-	c.raw.caches[key] = &update
+	c.raw.caches[key] = &Item[T]{Data: &update, CreatedAt: prev.CreatedAt}
 	return true
 }
 
