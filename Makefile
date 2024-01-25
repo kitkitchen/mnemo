@@ -4,8 +4,10 @@ make:
 run:
 	bin/mnemo
 
-publish:
-	git tag -s v0.0.1-beta.5 -m "mnemo v0.0.1-beta.5" && \
+tag:
+	git tag -af v0.0.1-beta.5 -m "mnemo v0.0.1-beta.5"
+
+publish-proxy:
 	GOPROXY=proxy.golang.org go list -m github.com/kitkitchen/mnemo@v0.0.1-beta.5
 
 lookup:
