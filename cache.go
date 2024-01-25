@@ -10,7 +10,7 @@ import (
 
 type (
 	// cache is a collection of data that can be cached and reduced.
-	cache[T any] struct {
+	Cache[T any] struct {
 		mu        sync.Mutex
 		createdAt time.Time
 		raw       *raw[T]
@@ -62,8 +62,8 @@ type (
 )
 
 // newCache is an internal implementation of NewCache
-func newCache[T any]() (data *cache[T]) {
-	c := &cache[T]{
+func newCache[T any]() (data *Cache[T]) {
+	c := &Cache[T]{
 		createdAt: time.Now(),
 		raw: &raw[T]{
 			caches:  make(map[CacheKey]*Item[T]),
@@ -79,7 +79,7 @@ func newCache[T any]() (data *cache[T]) {
 }
 
 // monitorChanges monitors changes to the raw cache and caches the raw cache and it's reduction.
-func (c *cache[T]) monitorChanges(setup chan bool) {
+func (c *Cache[T]) monitorChanges(setup chan bool) {
 	// cache initial state and confirm setup is complete
 	pRaw := c.copyRaw()
 	setup <- true
@@ -103,7 +103,7 @@ func (c *cache[T]) monitorChanges(setup chan bool) {
 }
 
 // copyRaw copies the raw cache.
-func (c *cache[T]) copyRaw() map[CacheKey]Item[T] {
+func (c *Cache[T]) copyRaw() map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	copy := make(map[CacheKey]Item[T])
@@ -114,7 +114,7 @@ func (c *cache[T]) copyRaw() map[CacheKey]Item[T] {
 }
 
 // cacheRaw caches the raw cache.
-func (c *cache[T]) cacheRaw(t time.Time, copy map[CacheKey]Item[T]) {
+func (c *Cache[T]) cacheRaw(t time.Time, copy map[CacheKey]Item[T]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.raw.history[t] = copy
@@ -137,7 +137,7 @@ func newCacheReducer[T, U any](f ReducerFunc[T, U]) func([]reducerCache[T]) []re
 }
 
 // reduce implements the user defined reducer function.
-func (c *cache[T]) reduce(copy map[CacheKey]Item[T]) []reducerCache[any] {
+func (c *Cache[T]) reduce(copy map[CacheKey]Item[T]) []reducerCache[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -154,7 +154,7 @@ func (c *cache[T]) reduce(copy map[CacheKey]Item[T]) []reducerCache[any] {
 }
 
 // cacheReduction caches the reduced cache.
-func (c *cache[T]) cacheReduction(t time.Time, r []reducerCache[any]) {
+func (c *Cache[T]) cacheReduction(t time.Time, r []reducerCache[any]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	//sort by createdAt
@@ -171,7 +171,7 @@ func (c *cache[T]) cacheReduction(t time.Time, r []reducerCache[any]) {
 // Setting a reducer is mandatory for triggering change monitoring. DefaultReducer is available but
 // merely returns the raw cache so it is not recommended if you are caching complex data types that cannot
 // not be serialized to json.
-func (c *cache[T]) SetReducer(rf ReducerFunc[T, any]) {
+func (c *Cache[T]) SetReducer(rf ReducerFunc[T, any]) {
 	cr := newCacheReducer(rf)
 	c.mu.Lock()
 	c.reducer.reduce = &cr
@@ -184,33 +184,33 @@ func (c *cache[T]) SetReducer(rf ReducerFunc[T, any]) {
 }
 
 // DefaultReducer is a reducer that returns the raw cache.
-func (c *cache[T]) DefaultReducer(state T) (mutation any) {
+func (c *Cache[T]) DefaultReducer(state T) (mutation any) {
 	return state
 }
 
 // RawFeed returns a channel of the raw cache updates.
-func (c *cache[T]) RawFeed() chan map[time.Time]map[CacheKey]Item[T] {
+func (c *Cache[T]) RawFeed() chan map[time.Time]map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.raw.feed
 }
 
 // ReducerFeed returns a channel of the reduced cache updates.
-func (c *cache[T]) ReducerFeed() chan reducerFeed[any] {
+func (c *Cache[T]) ReducerFeed() chan reducerFeed[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reducer.feed
 }
 
 // RawHistory returns the raw cache history.
-func (c *cache[T]) RawHistory() map[time.Time]map[CacheKey]Item[T] {
+func (c *Cache[T]) RawHistory() map[time.Time]map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.raw.history
 }
 
 // ReducerHistory returns the reduced cache history.
-func (c *cache[T]) ReducerHistory() []reducerHistory[any] {
+func (c *Cache[T]) ReducerHistory() []reducerHistory[any] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	rh := []reducerHistory[any]{}
@@ -224,7 +224,7 @@ func (c *cache[T]) ReducerHistory() []reducerHistory[any] {
 }
 
 // Get returns a cache by key.
-func (c *cache[T]) Get(key CacheKey) (Item[T], bool) {
+func (c *Cache[T]) Get(key CacheKey) (Item[T], bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -236,7 +236,7 @@ func (c *cache[T]) Get(key CacheKey) (Item[T], bool) {
 }
 
 // GetAll returns all caches.
-func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
+func (c *Cache[T]) GetAll() map[CacheKey]Item[T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cache := make(map[CacheKey]Item[T])
@@ -247,7 +247,7 @@ func (c *cache[T]) GetAll() map[CacheKey]Item[T] {
 }
 
 // Cache caches data by key.
-func (c *cache[T]) Cache(key CacheKey, data *T) error {
+func (c *Cache[T]) Cache(key CacheKey, data *T) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -263,7 +263,7 @@ func (c *cache[T]) Cache(key CacheKey, data *T) error {
 }
 
 // TODO: Convert to option
-func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
+func (c *Cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 	c.Cache(cfg.key, cfg.data)
 	if !(cfg.timeout > time.Second*0) {
 		return fmt.Errorf(
@@ -280,7 +280,7 @@ func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 		}
 		err := c.Delete(cfg.key)
 		if err != nil {
-			NewError[cache[T]](err.Error())
+			NewError[Cache[T]](err.Error())
 			return
 		}
 		cfg.timeoutFun(item.Data)
@@ -289,7 +289,7 @@ func (c *cache[T]) CacheWithTimeout(cfg cacheTimeoutConfig[T]) error {
 }
 
 // Update updates a cache with a new value. It returns false if the cache does not exist.
-func (c *cache[T]) Update(key CacheKey, update T) bool {
+func (c *Cache[T]) Update(key CacheKey, update T) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -303,7 +303,7 @@ func (c *cache[T]) Update(key CacheKey, update T) bool {
 }
 
 // Delete deletes a cache by key.
-func (c *cache[T]) Delete(key interface{}) error {
+func (c *Cache[T]) Delete(key interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

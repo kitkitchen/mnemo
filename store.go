@@ -90,7 +90,7 @@ func UseStore(key StoreKey) (*Store, error) {
 }
 
 // NewCache creates a new cache or returns an error if a cache with the same key already exists.
-func NewCache[Cache any](s StoreKey, c CacheKey) (*cache[Cache], error) {
+func NewCache[T any](s StoreKey, c CacheKey) (*Cache[T], error) {
 	store, err := UseStore(s)
 	if err != nil {
 		return nil, err
@@ -98,17 +98,17 @@ func NewCache[Cache any](s StoreKey, c CacheKey) (*cache[Cache], error) {
 
 	_, err = store.getCache(c)
 	if err == nil {
-		return nil, NewError[Cache](fmt.Sprintf("cache with key '%v' already exists", c))
+		return nil, NewError[T](fmt.Sprintf("cache with key '%v' already exists", c))
 	}
 
-	nc := newCache[Cache]()
+	nc := newCache[T]()
 	store.setCache(c, nc)
 
 	return nc, nil
 }
 
 // UseCache returns a cache by key or an error if the cache does not exist.
-func UseCache[Cache any](s StoreKey, c CacheKey) (*cache[Cache], error) {
+func UseCache[T any](s StoreKey, c CacheKey) (*Cache[T], error) {
 	store, err := UseStore(s)
 	if err != nil {
 		return nil, err
@@ -121,10 +121,10 @@ func UseCache[Cache any](s StoreKey, c CacheKey) (*cache[Cache], error) {
 	}
 
 	// Check if cache is of type Cache
-	cache, ok := data.(*cache[Cache])
+	cache, ok := data.(*Cache[T])
 	if !ok {
-		return nil, NewError[Cache](
-			fmt.Sprintf("cache with key '%v' is not of type '%v'", c, new(Cache)),
+		return nil, NewError[T](
+			fmt.Sprintf("cache with key '%v' is not of type '%v'", c, new(T)),
 		)
 	}
 	return cache, nil
